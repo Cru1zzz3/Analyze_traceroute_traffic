@@ -5,9 +5,9 @@ set(CMAKE_CXX_STANDARD 11)
 
 include (FindPCAP.cmake)
 
-include_directories("/home/cru1zzz3/curs/libpcap-1.9.0")
+#include_directories("/home/cru1zzz3/curs/libpcap-1.9.0")
 
-SET(CMAKE_MODULE_PATH "/home/cru1zzz3/curs/icmp_libcap_clion_cpp")
+SET(CMAKE_MODULE_PATH "/home/cru1zzz3/Yandex.Disk/5 semestr/ISIS/curs/icmp_libcap_clion_cpp")
 find_package(PCAP)
 
 set(SOURCE_FILES main.cpp)
