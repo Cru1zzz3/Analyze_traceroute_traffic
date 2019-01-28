@@ -1,63 +1,47 @@
 #include <iostream>
 #include <string>
-#include <string.h>
-
 #include <vector>
 #include <fstream>
 #include <pcap/pcap.h>
 #include <sys/socket.h>
-
 #include <netinet/in.h>
 #include <netinet/ether.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/udp.h>
-#include <netinet/tcp.h>
-
-
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <pcap.h>
+#include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <string.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
 
 struct deviceDescription {
     char *name;
     in_addr device_ip;
 };
 
-struct udpPacketsStruct {
-    //in_addr ip_src;
-    //in_addr ip_dst;
-    u_int16_t source_port;      // ntohs(udp->uh_sport);
-    u_int16_t destination_port; // ntohs(udp->uh_dport);
-    timeval timeStart;
-    timeval timeFinish;
-    timeval ping;
-    uint64_t ms;
-};
 
 struct icmpPacketsStruct {
     in_addr icmp_src;
     u_int icmp_count = 0;
     bool delivired;
-    std::vector<udpPacketsStruct> udp_inner;
-    timeval ping;
 };
 
-u_int portUnreachCount = 0;
 pcap_t *p;
-deviceDescription currentDevice;
 std::vector<deviceDescription> devices;
-
 
 in_addr target_ip;
 std::vector<icmpPacketsStruct> icmp_packets;
-std::vector<udpPacketsStruct> udp_packets;
-
-std::vector<icmpPacketsStruct> adresses;
+std::vector<in_addr> adresses;
 
 void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet) {
     static int count = 0;
@@ -114,6 +98,14 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
     const struct icmp *icmp;
     const struct udphdr *udp;
     const struct tcphdr *tcp;
+    //const char *payload; /* Packet payload */
+
+    /*
+     u_int size_ip;
+     u_int size_icmp;
+     u_int size_tcp;
+     u_int size_udp;
+     */
 
 //And now we do our magical typecasting:
 
@@ -125,34 +117,43 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
         std::cout << std::endl;
         count++;
         std::cout << "Packet " << count << std::endl;
+
+        //std::cout << "struct pole dst packet ip\t" << ip->ip_dst.s_addr << std::endl;
+        //std::cout << "struct pole dst target ip\t" << target_ip.s_addr << std::endl;
+
         std::cout << "Packet ip src\t" << inet_ntoa(ip->ip_src) << std::endl;
         std::cout << "Packet ip dst\t" << inet_ntoa(ip->ip_dst) << std::endl;
         std::cout << "Packet ip ttl\t" << (u_int) ip->ip_ttl << std::endl;
+        //std::cout << "Target ip\t\t" << inet_ntoa(target_ip) << std::endl;
+        //std::cout << "Equal" << std::endl;
 
-        if ((u_int) ip->ip_p == 17) {
+
+        if ((u_int) ip->ip_p == 6) {
+            std::cout << "IP protocol contains TCP protocol" << std::endl;
+            tcp = (struct tcphdr *) (packet + SIZE_ETHERNET + sizeof(struct ip));
+
+
+        } else if ((u_int) ip->ip_p == 17) {
             std::cout << "IP protocol contains UDP protocol" << std::endl;
             udp = (struct udphdr *) (packet + SIZE_ETHERNET + sizeof(struct ip));
-            udpPacketsStruct udp_packet;
-            udp_packet.source_port = ntohs(udp->uh_sport);
-            udp_packet.destination_port = ntohs(udp->uh_dport);
-            udp_packet.timeStart = hdr->ts;
-            udp_packets.push_back(udp_packet);
 
-            std::cout << "Protocol:\t\t\tUDP" << std::endl;
-            std::cout << "Source port:\t\t" << udp_packet.source_port << std::endl;
-            std::cout << "Destination port:\t" << udp_packet.destination_port << std::endl;
+            std::cout << "Port source: " << ntohs(udp->source) << std::endl;
+            std::cout << "Port destination: " << ntohs(udp->dest) << std::endl;
 
 
         }
         pcap_dump(user, hdr, packet);
     } else if (((u_int) ip->ip_p == 1)) {
-
         std::cout << std::endl;
         count++;
         std::cout << "Packet " << count << std::endl;
+
         std::cout << "Packet ip src\t" << inet_ntoa(ip->ip_src) << std::endl;
         std::cout << "Packet ip dst\t" << inet_ntoa(ip->ip_dst) << std::endl;
 
+        //std::cout << "Device ip\t\t" << inet_ntoa(device_ip) << std::endl;
+        //if (inet_ntoa(ip->ip_dst) == inet_ntoa(device_ip))
+        //std::cout << "Equal" << std::endl;
         std::cout << "IP protocol contains ICMP protocol" << std::endl;
 
         icmp = (struct icmp *) (packet + SIZE_ETHERNET + sizeof(struct ip));
@@ -186,7 +187,6 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
         std::cout << "Type: " << type_name[type] << std::endl;
         std::cout << "Code: " << (u_int) code << std::endl;
 
-        struct ip *ip_inner = (struct ip *) icmp->icmp_data;
 
 #define ICMP_TYPE_MAX (sizeof type_name / sizeof type_name[0])
 
@@ -197,23 +197,19 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
         if (type == ICMP_ECHOREPLY || type == ICMP_ECHO) {
 
 
-        } else if (type == ICMP_UNREACH && (ip_inner->ip_dst.s_addr == target_ip.s_addr)) {
-            portUnreachCount++;
-            if (portUnreachCount == 3)
+        } else if (type == ICMP_UNREACH) {
+           /*
+            * bool complete = true;
+            for (int i = 0; i < icmp_packets.size(); i++) {
+                if (!icmp_packets[i].delivired) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete)
+
+                */
                 pcap_breakloop(p);
-
-
-            /*
-             * bool complete = true;
-             for (int i = 0; i < icmp_packets.size(); i++) {
-                 if (!icmp_packets[i].delivired) {
-                     complete = false;
-                     break;
-                 }
-             }
-             if (complete)
-
-                 */
 
             if (code == ICMP_UNREACH_NEEDFRAG) {
 
@@ -227,97 +223,86 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
         //if the icmp packet carry ip header
 
         if (type == ICMP_TIMXCEED || type == ICMP_UNREACH) {
+            struct ip *ip_inner = (struct ip *) icmp->icmp_data;
 
-
+            //copy header
+            u_int version = ip_inner->ip_v;
+            u_int header_len = ip_inner->ip_hl << 2;
+            u_char tos = ip_inner->ip_tos;
+            u_int16_t total_len = ntohs(ip_inner->ip_len);
+            u_int16_t id = ntohs(ip_inner->ip_id);
+            u_int16_t offset = ntohs(ip_inner->ip_off);
             u_char inner_ttl = ip_inner->ip_ttl;
             u_char protocol = ip_inner->ip_p;
+            u_int16_t checksum = ntohs(ip_inner->ip_sum);
 
-            std::cout << "Packet inner ip src\t" << inet_ntoa(ip_inner->ip_src) << std::endl;
-            std::cout << "Packet inner ip dst\t" << inet_ntoa(ip_inner->ip_dst) << std::endl;
+            //print
+            //std::cout << std::endl;
+            //std::cout << "Inner protocol: IP " << std::endl;
+            //std::cout << "TTL: " << (int)inner_ttl << std::endl;
 
             in_addr current_ip;
             current_ip = ip->ip_src;
+            ////////////////////////////////////////////////////////////////////////////////////////////
+
+            icmpPacketsStruct icmp_packet;
+
+            if (icmp_packets.empty()) {
+                icmp_packet.icmp_src = current_ip;
+                icmp_packet.icmp_count++;
+                icmp_packets.push_back(icmp_packet);
+            } else {
+                bool duplicate = false;
+                for (int i = 0; i < icmp_packets.size(); i++) {
+                    if (current_ip.s_addr == icmp_packets[i].icmp_src.s_addr) {
+                        duplicate = true;
+                        icmp_packets[i].icmp_count++;
+                        if (icmp_packets[i].icmp_count == 3) {
+                            icmp_packets[i].delivired = true;
+                            adresses.push_back(icmp_packets[i].icmp_src);
+                        }
+                        break;
+                    }
+                }
+                if (!duplicate) {
+                    icmp_packet.icmp_src = current_ip;
+                    icmp_packet.icmp_count++;
+                    icmp_packets.push_back(icmp_packet);
+                }
+            }
+
 
             if (protocol == IPPROTO_ICMP) {
 
             };
 
 
-            if (protocol == IPPROTO_UDP && ip_inner->ip_dst.s_addr == target_ip.s_addr) {
+            if (protocol == IPPROTO_UDP) {
 
                 udp = (struct udphdr *) ((icmp->icmp_data) + sizeof(struct ip));
 
-                udpPacketsStruct udp_packet;
-
-                udp_packet.source_port = ntohs(udp->uh_sport);
-                udp_packet.destination_port = ntohs(udp->uh_dport);
-
-
-                std::cout << "Protocol:\t\t\tUDP in ICMP" << std::endl;
-                std::cout << "Source port:\t\t" << udp_packet.source_port << std::endl;
-                std::cout << "Destination port:\t" << udp_packet.destination_port << std::endl;
-
-                for (int i = 0; i < udp_packets.size(); i++) {
-                    if (udp_packet.destination_port == udp_packets[i].destination_port) {
-
-                        udp_packets[i].timeFinish = hdr->ts;
-
-                        udp_packets[i].ping.tv_sec = udp_packets[i].timeFinish.tv_sec - udp_packets[i].timeStart.tv_sec;
-                        udp_packets[i].ping.tv_usec =
-                                udp_packets[i].timeFinish.tv_usec - udp_packets[i].timeStart.tv_usec;
-
-                        udp_packets[i].ms =
-                                (udp_packets[i].ping.tv_sec * (uint64_t) 1000) + (udp_packets[i].ping.tv_usec / 1000);
-
-                        udp_packet = udp_packets[i];
-
-                        break;
-                    }
-                }
+                u_int16_t source_port = ntohs(udp->uh_sport);
+                u_int16_t destination_port = ntohs(udp->uh_dport);
+                //u_int16_t len = ntohs(udp->uh_ulen);
+                //u_int16_t checksum = ntohs(udp->uh_sum);
 
                 //print
-
-                icmpPacketsStruct icmp_packet;
-
-                if (icmp_packets.empty()) {
-                    icmp_packet.icmp_src = current_ip;
-                    icmp_packet.icmp_count++;
-                    icmp_packet.udp_inner.push_back(udp_packet);
-                    icmp_packets.push_back(icmp_packet);
-                } else {
-                    bool duplicate = false;
-                    for (int i = 0; i < icmp_packets.size(); i++) {
-                        if (current_ip.s_addr == icmp_packets[i].icmp_src.s_addr) {
-                            duplicate = true;
-
-                            icmp_packets[i].udp_inner.push_back(udp_packet);
-
-                            icmp_packets[i].icmp_count++;
-                            /*
-                            if (icmp_packets[i].icmp_count == 2) {
-                                icmp_packets[i].delivired = true;
-                                adresses.push_back(icmp_packets[i]);
-                            }
-                             */
-                            break;
-                        }
-                    }
-                    if (!duplicate) {
-                        icmp_packet.icmp_src = current_ip;
-                        icmp_packet.icmp_count++;
-                        icmp_packet.udp_inner.push_back(udp_packet);
-                        icmp_packets.push_back(icmp_packet);
-                    }
-                }
-
+                std::cout << "Protocol:\t\t\tUDP" << std::endl;
+                std::cout << "Source port:\t\t" << source_port << std::endl;
+                std::cout << "Destination port:\t" << destination_port << std::endl;
+                //printf("+-------------------------+-------------------------+\n");
             }
 
-            //if (protocol == IPPROTO_TCP) { };
+            if (protocol == IPPROTO_TCP) {
 
+            };
 
-        }
+        }//end if
         pcap_dump(user, hdr, packet);
     }
+
+    //out.close();
+    //pcap_breakloop(p);
 }
 
 void list_devices(bool cout) {
@@ -333,7 +318,7 @@ void list_devices(bool cout) {
     if (errcode == 0) {
         while (device) {
 
-            //deviceDescription currentDevice;
+            deviceDescription currentDevice;
             in_addr device_ip;
 
             currentDevice.name = device->name;
@@ -383,16 +368,16 @@ int main(int argc, char *argv[]) {
 
     //argv[1] = "list";
 
-
-    //argc = 4;
-    //argv[1] = "wlp3s0";
-    //argv[2] = " ";
-    //argv[3] = "5.255.255.55";
+    argv[1] = "wlp3s0";
+    argv[2] = " ";
+    argv[3] = "8.8.8.8";
 
     int i = 1;
     while (i < argc) {
+        //std::cout << argv[i]<< std::endl;
         if (argv[i] != " ")
             command.push_back(argv[i]);
+        //std::cout << command[i]<< std::endl;
         i++;
     }
 
@@ -414,7 +399,9 @@ int main(int argc, char *argv[]) {
 
     list_devices(cout);
 
+    //(strcmp(command[0], "wlp3s0") == 0)  && (strcmp(command[1], "8.8.8.8") == 0)
     if (!cout) {
+        deviceDescription currentDevice;
         bool find = false;
         for (i = 0; i < devices.size(); i++) {
             if (strcmp(devices[i].name, command[0]) == 0) {
@@ -427,11 +414,10 @@ int main(int argc, char *argv[]) {
 
         if (find) {
             std::cout << "Device " << currentDevice.name << " is preparing..." << std::endl;
-            if (inet_aton(command[1], &target_ip) == 0)
+            if (inet_aton(argv[3], &target_ip) == 0)
                 std::cout << "Invalid address" << std::endl;
 
             else {
-                target_ip.s_addr = inet_addr(command[1]);
                 //std::cout << inet_ntoa(target_ip) << std::endl;
 
                 const char *device;
@@ -442,7 +428,7 @@ int main(int argc, char *argv[]) {
                 const int snaplen = 65536;
                 errcode = pcap_set_snaplen(p, snaplen);
                 errcode = pcap_set_promisc(p, 1);
-				
+
                 errcode = pcap_activate(p);
                 if (errcode != 0) {
                     errDescr = pcap_statustostr(errcode);
@@ -483,35 +469,23 @@ int main(int argc, char *argv[]) {
                 out.open("mytraceroute_hops.txt", std::ios_base::out);
 
                 int count = 0;
-
                 /*
                 for (i = 0; i < adresses.size(); i++) {
                     count++;
-                    std::cout << count << "\t";
-                    out << count << "\t";
-                    std::cout << inet_ntoa(adresses[i].icmp_src) << "\t\t";
-                    out << inet_ntoa(adresses[i].icmp_src) << "\t\t";
-                    for (int j = 0;j < adresses[i].udp_inner.size();j++){
-                        std::cout << adresses[i].udp_inner[j].ms << " ms\t";
-                        out << adresses[i].udp_inner[j].ms << " ms\t";
-                    }
-                    std::cout << std::endl;
+                    std::cout << count << " hop ";
+                    out << count << " hop ";
+                    std::cout << inet_ntoa(adresses[i]) << std::endl;
+                    out << inet_ntoa(adresses[i]) << std::endl;
                 }
                 */
 
                 for (i = 0; i < icmp_packets.size(); i++) {
                     count++;
-                    std::cout << count << "\t";
-                    out << count << "\t";
-                    std::cout << inet_ntoa(icmp_packets[i].icmp_src) << "\t\t";
-                    out << inet_ntoa(icmp_packets[i].icmp_src) << "\t\t";
-                    for (int j = 0; j < icmp_packets[i].udp_inner.size(); j++) {
-                        std::cout << icmp_packets[i].udp_inner[j].ms << " ms\t";
-                        out << icmp_packets[i].udp_inner[j].ms << " ms\t";
-                    }
-                    std::cout << std::endl;
+                    std::cout << count << " hop ";
+                    out << count << " hop ";
+                    std::cout << inet_ntoa(icmp_packets[i].icmp_src) << std::endl;
+                    out << inet_ntoa(icmp_packets[i].icmp_src) << std::endl;
                 }
-
                 out.close();
             }
         } else std::cout << "Device " << command[0] << " not in devices" << std::endl;
@@ -520,3 +494,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+

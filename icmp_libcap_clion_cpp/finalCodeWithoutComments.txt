@@ -29,10 +29,8 @@ struct deviceDescription {
 };
 
 struct udpPacketsStruct {
-    //in_addr ip_src;
-    //in_addr ip_dst;
-    u_int16_t source_port;      // ntohs(udp->uh_sport);
-    u_int16_t destination_port; // ntohs(udp->uh_dport);
+    u_int16_t source_port;     
+    u_int16_t destination_port; 
     timeval timeStart;
     timeval timeFinish;
     timeval ping;
@@ -69,43 +67,8 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
     local_tv_sec = hdr->ts.tv_sec;
     ltime = localtime(&local_tv_sec);
     strftime(timestr, sizeof timestr, "%H:%M:%S", ltime);
-    //std::cout << "Time " << timestr << std::endl;
+    
     char *endTime = timestr;
-
-    //std::cout << "Packet " << count << std::endl;
-    //printf("\tTime: %s.%.6d\n", timestr, hdr->ts.tv_usec);
-
-
-    /*
-    // Ethernet header //
-    #define ETHER_ADDR_LEN	6 // Ethernet addresses are 6 bytes
-
-    struct sniff_ethernet {
-        u_char ether_dhost[ETHER_ADDR_LEN]; // Destination host address
-        u_char ether_shost[ETHER_ADDR_LEN]; // Source host address
-        u_short ether_type; // IP? ARP? RARP? etc
-    };
-
-    // IP header //
-
-    struct sniff_ip {
-        u_char ip_ttl;		// time to live
-        u_char ip_p;		// protocol
-        struct in_addr ip_src,ip_dst; // source and dest address
-    };
-#define IP_HL(ip)		(((ip)->ip_vhl) & 0x0f)
-#define IP_V(ip)		(((ip)->ip_vhl) >> 4)
-
-    // TCP header //
-    typedef u_int tcp_seq;
-    struct sniff_tcp {
-        u_short th_sport;	// source port
-        u_short th_dport;	// destination port
-        tcp_seq th_seq;		// sequence number
-        tcp_seq th_ack;		// acknowledgement
-    };
-    */
-
 
 #define SIZE_ETHERNET 14 // ethernet headers are always exactly 14 bytes
 
@@ -114,8 +77,6 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
     const struct icmp *icmp;
     const struct udphdr *udp;
     const struct tcphdr *tcp;
-
-//And now we do our magical typecasting:
 
     ethernet = (struct ethernet *) (packet);
     ip = (struct ip *) (packet + SIZE_ETHERNET);
@@ -202,19 +163,6 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
             if (portUnreachCount == 3)
                 pcap_breakloop(p);
 
-
-            /*
-             * bool complete = true;
-             for (int i = 0; i < icmp_packets.size(); i++) {
-                 if (!icmp_packets[i].delivired) {
-                     complete = false;
-                     break;
-                 }
-             }
-             if (complete)
-
-                 */
-
             if (code == ICMP_UNREACH_NEEDFRAG) {
 
             }
@@ -223,8 +171,6 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
         } else if (type == ICMP_TIMXCEED) {
 
         }
-
-        //if the icmp packet carry ip header
 
         if (type == ICMP_TIMXCEED || type == ICMP_UNREACH) {
 
@@ -275,8 +221,6 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
                     }
                 }
 
-                //print
-
                 icmpPacketsStruct icmp_packet;
 
                 if (icmp_packets.empty()) {
@@ -293,12 +237,7 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
                             icmp_packets[i].udp_inner.push_back(udp_packet);
 
                             icmp_packets[i].icmp_count++;
-                            /*
-                            if (icmp_packets[i].icmp_count == 2) {
-                                icmp_packets[i].delivired = true;
-                                adresses.push_back(icmp_packets[i]);
-                            }
-                             */
+             
                             break;
                         }
                     }
@@ -311,8 +250,6 @@ void callback(u_char *user, const struct pcap_pkthdr *hdr, const u_char *packet)
                 }
 
             }
-
-            //if (protocol == IPPROTO_TCP) { };
 
 
         }
@@ -332,8 +269,7 @@ void list_devices(bool cout) {
     errcode = pcap_findalldevs(&device, errbuf);
     if (errcode == 0) {
         while (device) {
-
-            //deviceDescription currentDevice;
+          
             in_addr device_ip;
 
             currentDevice.name = device->name;
@@ -379,33 +315,13 @@ int main(int argc, char *argv[]) {
     int errcode;
 
     std::vector<char *> command;
-    //command.push_back(argv[0]);
-
-    //argv[1] = "list";
-
-
-    //argc = 4;
-    //argv[1] = "wlp3s0";
-    //argv[2] = " ";
-    //argv[3] = "5.255.255.55";
-
-    int i = 1;
+ 
+	int i = 1;
     while (i < argc) {
         if (argv[i] != " ")
             command.push_back(argv[i]);
         i++;
     }
-
-    /*
-    i = 0;
-    while (argv[i]) {
-        std::cout << argv[i] << std::endl;
-        i++;
-    }
-    std::cout << argc << std::endl;
-    */
-
-    //std::cout<< argv[1] << std::endl;
 
     bool cout = false;
 
@@ -432,7 +348,6 @@ int main(int argc, char *argv[]) {
 
             else {
                 target_ip.s_addr = inet_addr(command[1]);
-                //std::cout << inet_ntoa(target_ip) << std::endl;
 
                 const char *device;
                 const char *errDescr;
@@ -442,7 +357,7 @@ int main(int argc, char *argv[]) {
                 const int snaplen = 65536;
                 errcode = pcap_set_snaplen(p, snaplen);
                 errcode = pcap_set_promisc(p, 1);
-				
+
                 errcode = pcap_activate(p);
                 if (errcode != 0) {
                     errDescr = pcap_statustostr(errcode);
@@ -459,15 +374,6 @@ int main(int argc, char *argv[]) {
                 if (fileDumper == NULL)
                     error = pcap_geterr(p);
 
-                /*
-                bpf_program *bpf;
-                const char *filter = "udp or icmp";
-                int compileOptimize = 0;
-                bpf_u_int32 netmask;
-                pcap_compile(p, bpf, filter, compileOptimize, netmask);
-                pcap_setfilter(p, bpf);
-                */
-
                 int cnt = -1; //infinity
                 errcode = pcap_loop(p, cnt, callback, (u_char *) fileDumper);
                 if (errcode != 0) {
@@ -483,21 +389,6 @@ int main(int argc, char *argv[]) {
                 out.open("mytraceroute_hops.txt", std::ios_base::out);
 
                 int count = 0;
-
-                /*
-                for (i = 0; i < adresses.size(); i++) {
-                    count++;
-                    std::cout << count << "\t";
-                    out << count << "\t";
-                    std::cout << inet_ntoa(adresses[i].icmp_src) << "\t\t";
-                    out << inet_ntoa(adresses[i].icmp_src) << "\t\t";
-                    for (int j = 0;j < adresses[i].udp_inner.size();j++){
-                        std::cout << adresses[i].udp_inner[j].ms << " ms\t";
-                        out << adresses[i].udp_inner[j].ms << " ms\t";
-                    }
-                    std::cout << std::endl;
-                }
-                */
 
                 for (i = 0; i < icmp_packets.size(); i++) {
                     count++;
